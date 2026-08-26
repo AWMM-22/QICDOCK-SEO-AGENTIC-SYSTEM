@@ -48,7 +48,10 @@ class MarketingGoal(Base, UUIDMixin, TimestampMixin, OrganizationBase):
     agent_runs: Mapped[list["AgentRun"]] = relationship(
         "AgentRun",
         back_populates="marketing_goal",
-        cascade="all, delete-orphan",
+    )
+    content_items: Mapped[list["ContentItem"]] = relationship(
+        "ContentItem",
+        back_populates="marketing_goal",
     )
 
     __table_args__ = (
@@ -67,7 +70,7 @@ class KnowledgeDocument(Base, UUIDMixin, TimestampMixin, OrganizationBase):
     chunk_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(JSONB, nullable=True)
-    metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    meta: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
     organization: Mapped["Organization"] = relationship(
         "Organization",
@@ -142,7 +145,7 @@ class ContentItem(Base, UUIDMixin, TimestampMixin, OrganizationBase):
     )
     marketing_goal: Mapped[Optional["MarketingGoal"]] = relationship(
         "MarketingGoal",
-        back_populates="agent_runs",
+        back_populates="content_items",
     )
     agent_run: Mapped[Optional["AgentRun"]] = relationship(
         "AgentRun",
@@ -221,7 +224,7 @@ class ResearchSource(Base, UUIDMixin, TimestampMixin, OrganizationBase):
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     relevance: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    metadata: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    meta: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
     agent_run: Mapped["AgentRun"] = relationship(
         "AgentRun",

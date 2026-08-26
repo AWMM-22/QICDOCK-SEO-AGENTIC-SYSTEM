@@ -1,8 +1,47 @@
-from typing import Optional, Any
-from pydantic import BaseModel, Field
+import operator
+from typing import Optional, Any, Annotated
+from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 from app.db.models.agents import AgentType, AgentRunStatus
 from app.db.models.marketing import ContentType, ContentStatus
+
+
+def _merge_dict(old: Optional[dict], new: Optional[dict]) -> dict:
+    """Reducer: shallow-merge dicts so parallel branches can both write metadata."""
+    merged = dict(old or {})
+    merged.update(new or {})
+    return merged
+
+
+def _merge_unique(old: Optional[list], new: Optional[list]) -> list:
+    """Reducer: union of scalar lists (deduped) - safe for parallel error accumulation."""
+    seen = set()
+    out = []
+    for item in list(old or []) + list(new or []):
+        key = item if isinstance(item, (str, int, float, bool)) else str(item)
+        if key not in seen:
+            seen.add(key)
+            out.append(item)
+    return out
+
+
+def _merge_agent_runs(old: Optional[list], new: Optional[list]) -> list:
+    """Reducer: merge agent-run records by id; later status overwrites earlier."""
+    by_id = {}
+    order = []
+    for run in list(old or []) + list(new or []):
+        rid = run.get("id") if isinstance(run, dict) else None
+        if rid is None:
+            continue
+        if rid not in by_id:
+            order.append(rid)
+        by_id[rid] = run
+    return [by_id[i] for i in order]
+
+
+def _last(old, new):
+    """Reducer: last write wins."""
+    return new if new is not None else old
 
 
 class MarketingRequest(BaseModel):
@@ -31,6 +70,8 @@ class BrandContext(BaseModel):
     visual_style: Optional[str] = None
     colors: dict = Field(default_factory=dict)
     usp: list[str] = Field(default_factory=list)
+    marketing_claims: list[str] = Field(default_factory=list)
+    competitors: list[dict] = Field(default_factory=list)
     guidelines: list[dict] = Field(default_factory=list)
 
 
@@ -126,6 +167,7 @@ class GeneratedContentItem(BaseModel):
     status: ContentStatus = ContentStatus.GENERATED
     review_score: Optional[float] = None
     review_feedback: Optional[str] = None
+    revision_count: int = 0
 
 
 class GeneratedContent(BaseModel):
@@ -148,6 +190,74 @@ class GeneratedImage(BaseModel):
 
 class GeneratedImages(BaseModel):
     images: list[GeneratedImage] = Field(default_factory=list)
+
+
+class ProductAnalysis(BaseModel):
+    main_usp: str = ""
+    secondary_usps: list[str] = Field(default_factory=list)
+    pain_point_solved: str = ""
+    ideal_use_case: str = ""
+    target_audience: str = ""
+    emotional_benefit: str = ""
+    functional_benefit: str = ""
+    differentiators: list[str] = Field(default_factory=list)
+    marketing_angles: list[str] = Field(default_factory=list)
+    content_opportunities: list[str] = Field(default_factory=list)
+
+
+class InstagramCopyItem(BaseModel):
+    hook: str
+    caption: str
+    cta: str
+    hashtags: list[str] = Field(default_factory=list)
+    visual_concept: str
+    image_prompt: str
+    carousel_slides: list[str] = Field(default_factory=list)
+
+
+class InstagramContentSet(BaseModel):
+    items: list[InstagramCopyItem] = Field(default_factory=list)
+
+
+class ReelScene(BaseModel):
+    duration: int
+    visual: str
+    voiceover: str
+    text_overlay: str
+
+
+class ReelCopyItem(BaseModel):
+    hook: str
+    duration: int
+    script: str
+    scenes: list[ReelScene] = Field(default_factory=list)
+    caption: str
+    cta: str
+    hashtags: list[str] = Field(default_factory=list)
+    cover_image_prompt: str
+
+
+class ReelContentSet(BaseModel):
+    items: list[ReelCopyItem] = Field(default_factory=list)
+
+
+class StoryFrame(BaseModel):
+    frame_type: str
+    text: str
+    interactive_element: Optional[str] = None
+
+
+class StorySequenceItem(BaseModel):
+    hook: str
+    frames: list[StoryFrame] = Field(default_factory=list)
+    cta: str
+    caption: str = ""
+    hashtags: list[str] = Field(default_factory=list)
+    cover_image_prompt: str = ""
+
+
+class StoryContentSet(BaseModel):
+    items: list[StorySequenceItem] = Field(default_factory=list)
 
 
 class ReviewResultItem(BaseModel):
@@ -180,15 +290,15 @@ class MarketingState(BaseModel):
     trend_insights: Optional[CompetitorInsights] = None
     content_strategy: Optional[ContentStrategy] = None
     generated_content: Optional[GeneratedContent] = None
+    pending_content_items: Annotated[list[dict], operator.add] = Field(default_factory=list)
     generated_images: Optional[GeneratedImages] = None
     review_results: Optional[ReviewResults] = None
     revision_count: int = 0
     final_report: Optional[str] = None
     email_status: str = "pending"
-    errors: list[str] = Field(default_factory=list)
-    metadata: dict = Field(default_factory=dict)
-    current_agent: Optional[AgentType] = None
-    agent_runs: list[dict] = Field(default_factory=list)
+    errors: Annotated[list[str], _merge_unique] = Field(default_factory=list)
+    metadata: Annotated[dict, _merge_dict] = Field(default_factory=dict)
+    current_agent: Annotated[Optional[AgentType], _last] = None
+    agent_runs: Annotated[list[dict], _merge_agent_runs] = Field(default_factory=list)
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

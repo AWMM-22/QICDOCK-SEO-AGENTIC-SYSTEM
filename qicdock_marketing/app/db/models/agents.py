@@ -196,10 +196,10 @@ class ReportStatus(str, enum.Enum):
 class MarketingReport(Base, UUIDMixin, TimestampMixin, OrganizationBase):
     __tablename__ = "marketing_reports"
 
-    marketing_goal_id: Mapped[uuid.UUID] = mapped_column(
+    marketing_goal_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("marketing_goals.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     agent_run_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

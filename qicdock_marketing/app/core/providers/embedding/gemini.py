@@ -9,6 +9,8 @@ from app.core.providers.embedding.base import (
 
 
 GEMINI_EMBEDDING_PRICING = {
+    "gemini-embedding-001": 0.00002,
+    "gemini-embedding-2": 0.00002,
     "text-embedding-004": 0.00002,
 }
 
@@ -17,7 +19,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "text-embedding-004",
+        default_model: str = "gemini-embedding-001",
         dimensions: int = 768,
     ):
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("EMBEDDING_API_KEY")
@@ -61,6 +63,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 model=model_name,
                 content=text,
                 task_type="retrieval_document",
+                output_dimensionality=self._dimensions,
             )
             embeddings.append(result["embedding"])
             total_tokens += len(text) // 4
@@ -83,5 +86,6 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             model=model_name,
             content=text,
             task_type="retrieval_query",
+            output_dimensionality=self._dimensions,
         )
         return result["embedding"]

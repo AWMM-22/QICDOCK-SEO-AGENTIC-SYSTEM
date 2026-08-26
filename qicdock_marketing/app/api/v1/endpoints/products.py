@@ -7,7 +7,7 @@ from typing import Optional
 from app.db.session.database import get_async_session
 from app.db.models.organization import Organization
 from app.db.models.product import Product, ProductImage
-from app.db.models.marketing import KnowledgeDocument
+from app.rag.knowledge import embed_knowledge_documents, search_knowledge
 from app.schemas.request.marketing import ProductCreateRequest, KnowledgeIngestRequest
 
 
@@ -128,20 +128,40 @@ async def ingest_knowledge(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    doc = KnowledgeDocument(
-        organization_id=request.organization_id,
+    docs = await embed_knowledge_documents(
+        session=session,
+        org_id=request.organization_id,
         title=request.title,
         content=request.content,
         source_type=request.source_type,
         source_url=request.source_url,
-        metadata=request.metadata,
+        meta=request.metadata,
     )
-    session.add(doc)
-    await session.commit()
-    await session.refresh(doc)
+
+    embedded_count = sum(1 for d in docs if d.embedding is not None)
 
     return {
-        "id": doc.id,
-        "title": doc.title,
-        "message": "Knowledge document ingested successfully",
+        "id": docs[0].id if docs else None,
+        "title": request.title,
+        "chunks_stored": len(docs),
+        "chunks_embedded": embedded_count,
+        "message": "Knowledge document ingested and indexed successfully",
     }
+
+
+@router.get("/knowledge/search")
+async def search_knowledge_endpoint(
+    organization_id: UUID,
+    q: str,
+    top_k: int = 5,
+    session: AsyncSession = Depends(get_async_session),
+):
+    result = await session.execute(
+        select(Organization).where(Organization.id == organization_id)
+    )
+    org = result.scalar_one_or_none()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    results = await search_knowledge(session, organization_id, q, top_k=top_k)
+    return {"query": q, "results": results, "count": len(results)}

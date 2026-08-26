@@ -5,7 +5,7 @@ from uuid import UUID
 from typing import Optional
 
 from app.db.session.database import get_async_session
-from app.db.models.content import ContentItem, ContentType, ContentStatus
+from app.db.models.marketing import ContentItem, ContentType, ContentStatus
 from app.schemas.request.marketing import (
     ContentInstagramRequest,
     ContentReelRequest,

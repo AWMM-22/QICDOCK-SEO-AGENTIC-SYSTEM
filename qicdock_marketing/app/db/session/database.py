@@ -35,8 +35,13 @@ async def get_async_session() -> AsyncSession:
 
 
 async def init_db() -> None:
+    # Import models so every table is registered on the shared metadata,
+    # then create any missing tables (idempotent).
+    import app.db.models  # noqa: F401
+    from app.db.models.base import Base as ModelBase
+
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(ModelBase.metadata.create_all)
 
 
 async def close_db() -> None:

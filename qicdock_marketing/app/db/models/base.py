@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase
 
@@ -35,6 +35,7 @@ class UUIDMixin:
 class OrganizationMixin:
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -46,3 +47,8 @@ class BaseModel(Base, UUIDMixin, TimestampMixin):
 
 class OrganizationScopedModel(BaseModel, OrganizationMixin):
     __abstract__ = True
+
+
+# Backwards-compatible alias used by all model modules
+# (models declare: class X(Base, UUIDMixin, TimestampMixin, OrganizationBase))
+OrganizationBase = OrganizationMixin

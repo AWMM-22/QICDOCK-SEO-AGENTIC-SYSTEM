@@ -30,11 +30,11 @@ class Settings(BaseSettings):
     )
 
     LLM_PROVIDER: str = Field(
-        default="gemini",
-        description="LLM provider: gemini, openai, anthropic, local"
+        default="groq",
+        description="LLM provider: groq, gemini, openai, anthropic, local"
     )
     LLM_MODEL: str = Field(
-        default="gemini-1.5-pro",
+        default="openai/gpt-oss-120b",
         description="LLM model name"
     )
     LLM_API_KEY: Optional[str] = Field(
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
         description="Embedding provider: gemini, openai, local"
     )
     EMBEDDING_MODEL: str = Field(
-        default="text-embedding-004",
+        default="gemini-embedding-001",
         description="Embedding model name"
     )
     EMBEDDING_API_KEY: Optional[str] = Field(
@@ -57,6 +57,11 @@ class Settings(BaseSettings):
         description="Embedding API key"
     )
     EMBEDDING_DIMENSIONS: int = 768
+
+    RAG_CONTEXT_TOP_K: int = Field(
+        default=5,
+        description="Number of knowledge base snippets retrieved per agent context load"
+    )
 
     SEARCH_PROVIDER: str = Field(
         default="tavily",
@@ -68,16 +73,44 @@ class Settings(BaseSettings):
     )
 
     IMAGE_PROVIDER: str = Field(
-        default="gemini",
-        description="Image provider: gemini, openai, stability, replicate"
+        default="higgsfield",
+        description="Image provider: higgsfield, gemini, openai, stability, replicate"
     )
     IMAGE_MODEL: str = Field(
-        default="gemini-2.0-flash-exp-image-generation",
+        default="gemini-2.5-flash-image",
         description="Image generation model"
     )
     IMAGE_API_KEY: Optional[str] = Field(
         default=None,
         description="Image generation API key"
+    )
+
+    VIDEO_PROVIDER: str = Field(
+        default="higgsfield",
+        description="Video provider: higgsfield, none"
+    )
+    VIDEO_MODEL: str = Field(
+        default="veo3.1/fast",
+        description="Higgsfield video model endpoint"
+    )
+    VIDEO_POLL_TIMEOUT_SECONDS: int = 600
+
+    # Higgsfield (image + video generation) - auth is "Authorization: Key {id}:{secret}"
+    HIGGSFIELD_API_KEY_ID: Optional[str] = Field(
+        default=None,
+        description="Higgsfield API key ID"
+    )
+    HIGGSFIELD_API_KEY_SECRET: Optional[str] = Field(
+        default=None,
+        description="Higgsfield API key secret"
+    )
+    HIGGSFIELD_IMAGE_ENDPOINT: str = Field(
+        default="/v1/text2image/soul",
+        description="Higgsfield text-to-image endpoint"
+    )
+    HIGGSFIELD_VIDEO_IMAGE_TO_VIDEO_ENDPOINT: str = Field(
+        default="/veo3.1/fast/image-to-video",
+        description="Higgsfield image-to-video endpoint"
     )
 
     EMAIL_PROVIDER: str = Field(
@@ -140,6 +173,19 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def _is_placeholder(value: Optional[str]) -> bool:
+    """True when a config value is still an unfilled template placeholder."""
+    if not value:
+        return True
+    v = value.strip().lower()
+    return (
+        v.startswith("paste")
+        or v.startswith("your")
+        or v.endswith("-here")
+        or v in {"", "none", "changeme", "change-me"}
+    )
 
 
 settings = get_settings()

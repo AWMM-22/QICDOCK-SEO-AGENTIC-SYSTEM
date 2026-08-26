@@ -1,7 +1,7 @@
 from typing import Optional
 from app.core.config.settings import settings
 from app.core.providers.llm.base import LLMProvider
-from app.core.providers.llm.gemini import GeminiProvider
+from app.core.providers.llm.groq import GroqProvider
 
 
 class LLMProviderFactory:
@@ -14,8 +14,8 @@ class LLMProviderFactory:
 
         provider_name = provider or settings.LLM_PROVIDER
 
-        if provider_name == "gemini":
-            cls._instance = GeminiProvider(
+        if provider_name == "groq":
+            cls._instance = GroqProvider(
                 api_key=settings.LLM_API_KEY,
                 default_model=settings.LLM_MODEL,
             )

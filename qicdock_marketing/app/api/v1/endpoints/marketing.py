@@ -123,17 +123,31 @@ async def run_marketing_workflow(run_id: UUID, initial_state: MarketingState):
     try:
         final_state = await marketing_graph.ainvoke(initial_state)
 
+        def _get(key, default=None):
+            if isinstance(final_state, dict):
+                return final_state.get(key, default)
+            return getattr(final_state, key, default)
+
+        errors = _get("errors", [])
+        generated_content = _get("generated_content")
+        generated_images = _get("generated_images")
+
         async with async_session_maker() as session:
             result = await session.execute(select(AgentRun).where(AgentRun.id == run_id))
             agent_run = result.scalar_one_or_none()
             if agent_run:
-                agent_run.status = AgentRunStatus.COMPLETED if not final_state.errors else AgentRunStatus.FAILED
+                agent_run.status = AgentRunStatus.COMPLETED if not errors else AgentRunStatus.FAILED
                 agent_run.completed_at = datetime.utcnow()
                 agent_run.output_data = {
-                    "content_generated": len(final_state.generated_content.items) if final_state.generated_content else 0,
-                    "images_generated": len(final_state.generated_images.images) if final_state.generated_images else 0,
-                    "email_status": final_state.email_status,
-                    "errors": final_state.errors,
+                    "content_generated": len(generated_content.items) if generated_content else 0,
+                    "images_generated": len(generated_images.images) if generated_images else 0,
+                    "email_status": _get("email_status"),
+                    "report_id": (_get("metadata") or {}).get("report_id"),
+                    "errors": list(errors),
+                }
+                agent_run.meta = {
+                    "current_agent": str(_get("current_agent").value) if _get("current_agent") else None,
+                    "agent_runs_count": len(_get("agent_runs", [])),
                 }
                 await session.commit()
 
@@ -178,7 +192,53 @@ async def generate_strategy_only(
     await validate_organization(session, request.organization_id)
     await validate_products(session, request.organization_id, request.product_ids)
 
+    marketing_request = MarketingRequest(
+        organization_id=request.organization_id,
+        product_ids=request.product_ids,
+        goal=request.goal,
+        platforms=request.platforms,
+        content_types=request.content_types,
+        quantity=request.quantity,
+    )
+
+    initial_state = MarketingState(
+        request=marketing_request,
+        organization_id=request.organization_id,
+        product_ids=request.product_ids,
+    )
+
+    # Strategy-only pipeline: context -> research -> audience -> competitors -> strategy
+    from app.agents.nodes.load_context import load_organization_context_node
+    from app.agents.nodes.load_product import load_product_context_node
+    from app.agents.nodes.research_agents import (
+        product_analyst_agent_node,
+        brand_knowledge_agent_node,
+        research_agent_node,
+        audience_agent_node,
+        competitor_trend_agent_node,
+    )
+    from app.agents.nodes.content_strategy import content_strategy_agent_node
+
+    state = initial_state
+    for node in (
+        load_organization_context_node,
+        load_product_context_node,
+        brand_knowledge_agent_node,
+        product_analyst_agent_node,
+        research_agent_node,
+        audience_agent_node,
+        competitor_trend_agent_node,
+        content_strategy_agent_node,
+    ):
+        updates = await node(state)
+        if isinstance(updates, dict):
+            for key, value in updates.items():
+                setattr(state, key, value)
+
+    strategy = state.content_strategy
     return {
-        "message": "Strategy generation endpoint - to be implemented",
-        "request": request.model_dump(),
+        "status": "completed",
+        "goal": request.goal,
+        "strategy": strategy.model_dump(mode="json") if strategy else None,
+        "errors": list(state.errors),
     }
